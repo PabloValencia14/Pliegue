@@ -27,6 +27,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import java.text.DateFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.Locale;
@@ -37,8 +38,8 @@ public class MainActivity extends Activity {
     private LinearLayout content, sections;
     private TextView status, loadStatus, retry;
     private ScrollView scroll;
-    private boolean refreshing, extending, endChecked;
-    private int generation, shownCount;
+    private boolean refreshing, extending, endChecked, pagePending;
+    private int generation, shownCount, restoreCount, restoreY = -1;
     private News.Catalog catalog;
     private final LinkedHashMap<String, TextView> firstHeadings = new LinkedHashMap<>();
     private final ArrayList<ArticlePhoto> photos = new ArrayList<>();
@@ -71,7 +72,7 @@ public class MainActivity extends Activity {
         view.setBackgroundColor(ink);
         host.addView(view, new LinearLayout.LayoutParams(-1, dp(height)));
     }
-    private LinearLayout column(LinearLayout row, float weight, boolean divider) {
+    private LinearLayout column(LinearLayout row, int width, boolean divider, boolean last) {
         if (divider) {
             View rule = new View(this);
             rule.setBackgroundColor(Color.rgb(183, 181, 174));
@@ -79,8 +80,8 @@ public class MainActivity extends Activity {
         }
         LinearLayout column = new LinearLayout(this);
         column.setOrientation(LinearLayout.VERTICAL);
-        column.setPadding(divider ? dp(18) : 0, 0, dp(18), 0);
-        row.addView(column, new LinearLayout.LayoutParams(0, -2, weight));
+        column.setPadding(divider ? dp(14) : 0, 0, last ? 0 : dp(14), 0);
+        row.addView(column, new LinearLayout.LayoutParams(width, -2));
         return column;
     }
     @Override public void onCreate(Bundle state) {
@@ -94,17 +95,10 @@ public class MainActivity extends Activity {
         render();
         if (state != null) {
             endChecked = state.getBoolean("endChecked", false);
-            int count = state.getInt("shownCount", shownCount);
-            while (catalog.hasMore() && shownCount < count) appendPage();
+            restoreCount = state.getInt("shownCount", shownCount);
+            restoreY = state.getInt("scrollY", 0);
+            if (!pagePending) appendPage();
             if (!catalog.hasMore() && endChecked) setFeedStatus("Has llegado al final de las noticias disponibles.", true);
-            int position = state.getInt("scrollY", 0);
-            scroll.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
-                @Override public void onGlobalLayout() {
-                    scroll.getViewTreeObserver().removeOnGlobalLayoutListener(this);
-                    scroll.scrollTo(0, position);
-                    updatePhotos();
-                }
-            });
         }
         boolean needsImages = false;
         try {
@@ -127,7 +121,7 @@ public class MainActivity extends Activity {
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
         int gutter = getResources().getConfiguration().screenWidthDp < 600 ? 20 : 34;
-        page.setPadding(dp(gutter), dp(10), dp(gutter), dp(36));
+        page.setPadding(dp(gutter), dp(6), dp(gutter), dp(28));
         scroll.addView(page);
 
         LinearLayout top = new LinearLayout(this);
@@ -144,7 +138,7 @@ public class MainActivity extends Activity {
         rule(page, 2);
         TextView masthead = text(getString(R.string.app_name), getResources().getConfiguration().screenWidthDp >= 600 ? 62 : 42, true);
         masthead.setGravity(Gravity.CENTER);
-        masthead.setPadding(0, dp(6), 0, dp(8));
+        masthead.setPadding(0, dp(2), 0, dp(4));
         page.addView(masthead);
         rule(page, 2);
 
@@ -182,6 +176,7 @@ public class MainActivity extends Activity {
             if (y > oldY) maybeLoadMore();
         });
         scroll.getViewTreeObserver().addOnGlobalLayoutListener(() -> {
+            if (pagePending && content.getWidth() > 0) content.post(() -> { if (pagePending && !isDestroyed()) appendPage(); });
             updatePhotos();
             if (scroll.getHeight() > 0 && scroll.getChildAt(0).getHeight() <= scroll.getHeight() + dp(240)) maybeLoadMore();
         });
@@ -194,6 +189,8 @@ public class MainActivity extends Activity {
         sections.removeAllViews();
         firstHeadings.clear();
         shownCount = 0;
+        restoreCount = 0;
+        restoreY = -1;
         ArrayList<String> selected = new ArrayList<>();
         for (String topic : News.TOPICS)
             if (getSharedPreferences("settings", 0).getBoolean(topic, true)) selected.add(topic);
@@ -215,15 +212,17 @@ public class MainActivity extends Activity {
         scroll.scrollTo(0, 0);
     }
     private void appendPage() {
-        LinkedHashMap<String, ArrayList<JSONObject>> grouped = catalog.nextPage(6);
-        if (shownCount == 0 && !grouped.isEmpty()) content.removeAllViews();
-        int width = getResources().getConfiguration().screenWidthDp;
-        int columns = width >= 1400 ? 4 : width >= 1000 ? 3 : width >= 600 ? 2 : 1;
-        boolean opening = shownCount == 0;
-        for (Map.Entry<String, ArrayList<JSONObject>> section : grouped.entrySet()) {
+        int width = content.getWidth();
+        if (width == 0) { pagePending = true; return; }
+        pagePending = false;
+        do {
+            LinkedHashMap<String, ArrayList<JSONObject>> grouped = catalog.nextPage(6);
+            if (shownCount == 0 && !grouped.isEmpty()) content.removeAllViews();
+            boolean opening = shownCount == 0;
+            for (Map.Entry<String, ArrayList<JSONObject>> section : grouped.entrySet()) {
                 TextView heading = label(section.getKey());
                 heading.setTextSize(15);
-                heading.setPadding(0, dp(24), 0, dp(10));
+                heading.setPadding(0, dp(18), 0, dp(8));
                 content.addView(heading);
                 if (!firstHeadings.containsKey(section.getKey())) {
                     firstHeadings.put(section.getKey(), heading);
@@ -236,41 +235,60 @@ public class MainActivity extends Activity {
                 }
                 rule(content, 2);
                 ArrayList<JSONObject> articles = section.getValue();
-                if (opening && columns > 1 && articles.size() >= 3) {
-                    LinearLayout leadRow = new LinearLayout(this);
-                    content.addView(leadRow);
-                    LinearLayout lead = column(leadRow, columns >= 3 ? 2 : 1.35f, false);
-                    LinearLayout side = column(leadRow, 1, true);
-                    LinearLayout far = columns >= 4 ? column(leadRow, 1, true) : side;
-                    addArticle(lead, articles.get(0), 0);
-                    addArticle(side, articles.get(1), 2);
-                    addArticle(far, articles.get(2), 2);
-                    for (int i = 3; i < articles.size(); i++) {
-                        LinearLayout target = columns >= 4 ? (i == 3 ? side : i == 4 ? far : lead)
-                            : (i % 2 == 1 ? lead : side);
-                        addArticle(target, articles.get(i), 2);
-                    }
-                } else {
-                    LinearLayout row = new LinearLayout(this);
-                    content.addView(row);
-                    ArrayList<LinearLayout> rails = new ArrayList<>();
-                    int count = Math.min(columns, articles.size());
-                    for (int i = 0; i < count; i++) rails.add(column(row, i == 0 && count > 1 ? 1.25f : 1, i > 0));
-                    for (int i = 0; i < articles.size(); i++)
-                        addArticle(rails.get(i % count), articles.get(i), i == 0 ? 1 : 2);
-                }
+                composeSection(articles, width, opening, Math.max(0, Arrays.asList(News.TOPICS).indexOf(section.getKey())));
                 shownCount += articles.size();
                 opening = false;
-        }
+            }
+        } while (shownCount < restoreCount && catalog.hasMore());
+        restoreCount = 0;
         boolean finished = !catalog.hasMore() && endChecked;
         setFeedStatus(finished ? "Has llegado al final de las noticias disponibles." : "", finished);
+        if (restoreY >= 0) {
+            int position = restoreY;
+            restoreY = -1;
+            scroll.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
+                @Override public void onGlobalLayout() {
+                    scroll.getViewTreeObserver().removeOnGlobalLayoutListener(this);
+                    scroll.scrollTo(0, position);
+                    updatePhotos();
+                }
+            });
+        }
+    }
+    private void composeSection(ArrayList<JSONObject> articles, int width, boolean opening, int variant) {
+        int columns = Math.min(width >= dp(1000) ? 3 : width >= dp(550) ? 2 : 1, (articles.size() + 1) / 2);
+        int feature = opening ? 0 : variant % columns;
+        float[] weights = new float[columns];
+        Arrays.fill(weights, 1);
+        weights[feature] = opening ? 1.75f : variant % 2 == 0 ? 1.45f : 1.25f;
+        int[] widths = ArticleColumns.widths(width, dp(1), weights);
+        int[] heights = new int[columns];
+        LinearLayout row = new LinearLayout(this);
+        content.addView(row);
+        ArrayList<LinearLayout> rails = new ArrayList<>();
+        for (int i = 0; i < columns; i++) rails.add(column(row, widths[i], i > 0, i == columns - 1));
+        int featureWidth = widths[feature] - rails.get(feature).getPaddingLeft() - rails.get(feature).getPaddingRight();
+        LinearLayout lead = articleBlock(articles.get(0), opening ? 0 : 1, featureWidth);
+        heights[feature] = placeArticle(rails.get(feature), lead, featureWidth, opening ? 0 : 1);
+        int narrowWidth = width;
+        for (int i = 0; i < columns; i++) narrowWidth = Math.min(narrowWidth, widths[i] - rails.get(i).getPaddingLeft() - rails.get(i).getPaddingRight());
+        ArrayList<LinearLayout> remaining = new ArrayList<>();
+        for (int i = 1; i < articles.size(); i++) remaining.add(articleBlock(articles.get(i), 2, narrowWidth));
+        // Place tall stories first so a final long headline cannot leave an empty neighbouring column.
+        remaining.sort((a, b) -> Integer.compare(b.getMeasuredHeight(), a.getMeasuredHeight()));
+        for (LinearLayout block : remaining) {
+            int target = ArticleColumns.shortest(heights);
+            LinearLayout rail = rails.get(target);
+            int articleWidth = widths[target] - rail.getPaddingLeft() - rail.getPaddingRight();
+            heights[target] += placeArticle(rail, block, articleWidth, 2);
+        }
     }
     private void setFeedStatus(String message, boolean canRetry) {
         loadStatus.setText(shownCount + " noticias mostradas" + (message.isEmpty() ? "" : " · " + message));
         retry.setVisibility(canRetry ? View.VISIBLE : View.GONE);
     }
     private void maybeLoadMore() {
-        if (refreshing || extending || catalog == null || scroll.getChildCount() == 0) return;
+        if (refreshing || extending || pagePending || catalog == null || scroll.getChildCount() == 0) return;
         int remaining = scroll.getChildAt(0).getHeight() - scroll.getHeight() - scroll.getScrollY();
         if (remaining > dp(600)) return;
         if (catalog.hasMore()) appendPage();
@@ -312,12 +330,23 @@ public class MainActivity extends Activity {
             }
         }
     }
-    private void addArticle(LinearLayout host, JSONObject article, int prominence) {
+    private int photoHeight(int width, int prominence) {
+        return Math.max(dp(prominence == 0 ? 210 : prominence == 1 ? 150 : 105),
+            Math.min(dp(prominence == 0 ? 310 : prominence == 1 ? 250 : 190), Math.round(width / (prominence == 0 ? 1.9f : prominence == 1 ? 1.65f : 1.85f))));
+    }
+    private int placeArticle(LinearLayout host, LinearLayout block, int width, int prominence) {
+        for (int i = 0; i < block.getChildCount(); i++)
+            if (block.getChildAt(i) instanceof ImageView) block.getChildAt(i).getLayoutParams().height = photoHeight(width, prominence);
+        host.addView(block);
+        rule(host, 1);
+        block.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        return block.getMeasuredHeight() + dp(1);
+    }
+    private LinearLayout articleBlock(JSONObject article, int prominence, int width) {
         LinearLayout block = new LinearLayout(this);
         block.setOrientation(LinearLayout.VERTICAL);
-        block.setPadding(0, dp(18), 0, dp(20));
+        block.setPadding(0, dp(prominence == 0 ? 18 : 14), 0, dp(18));
         block.setOnClickListener(view -> detail(article));
-        host.addView(block);
         TextView title = text(article.optString("title"), prominence == 0 ? 36 : prominence == 1 ? 25 : 21, true);
         title.setLineSpacing(dp(2), 1f);
         block.addView(title);
@@ -326,7 +355,7 @@ public class MainActivity extends Activity {
             ImageView image = new ImageView(this);
             image.setScaleType(ImageView.ScaleType.CENTER_CROP);
             image.setContentDescription("Fotografía de la noticia: " + article.optString("title"));
-            LinearLayout.LayoutParams imageLayout = new LinearLayout.LayoutParams(-1, dp(prominence == 0 ? 285 : prominence == 1 ? 170 : 135));
+            LinearLayout.LayoutParams imageLayout = new LinearLayout.LayoutParams(-1, photoHeight(width, prominence));
             imageLayout.topMargin = dp(12);
             block.addView(image, imageLayout);
             image.setVisibility(View.INVISIBLE);
@@ -345,7 +374,8 @@ public class MainActivity extends Activity {
         source.setTextSize(10);
         source.setPadding(0, dp(12), 0, 0);
         block.addView(source);
-        rule(host, 1);
+        block.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        return block;
     }
     private void refresh() {
         if (refreshing) return;

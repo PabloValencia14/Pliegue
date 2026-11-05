@@ -25,6 +25,16 @@
           "at": "2026-11-05T17:16:18Z",
           "by": "codex",
           "text": "Validación funcional completada en emulador Android 16: fotos, columnas, resumen, visor interno, vuelta, segundo lote al bajar y giro sin regresar al inicio. Se publica la versión de desarrollo 0.4.0 en PabloValencia14/Pliegue. La prueba física en la Pad y la ejecución nocturna siguen pendientes."
+        },
+        {
+          "at": "2026-11-05T18:07:52Z",
+          "by": "codex",
+          "text": "Prueba física del 5/11 en la Pad 7 completada sobre APK0.4.0: fotos, visor interno, segundo lote de noticias, giro y orientación automática restaurada. La actualización forzada en segundo plano generó la notificación sin poner la app delante; alarma registrada para6/11 a las08:00. Sigue pendiente observar una ejecución nocturna real. El usuario pide además composición más dinámica y menos huecos; se está ajustando el reparto de noticias por altura."
+        },
+        {
+          "at": "2026-11-05T18:16:19Z",
+          "by": "codex",
+          "text": "Corrección0.4.1 instalada y probada en la Pad7: composición por alturas medidas, aperturas y fotos variables, menor espacio vacío. Prueba física de fotos, resumen, visor, segundo lote, giro y restauración de orientación pasada. Prueba Java de anchos/reparto y revisión independiente correctas. Sin nuevos cierres de la app en los registros de la sesión."
         }
       ]
     }

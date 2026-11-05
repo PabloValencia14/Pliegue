@@ -23,6 +23,11 @@ jobs:
           log-accepted-android-sdk-licenses: false
       - name: Install Android SDK
         run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+      - name: Check column layout
+        run: |
+          mkdir -p app/build/layout-check
+          javac --release 17 -d app/build/layout-check app/src/main/java/es/pablo/periodico/ArticleColumns.java app/src/test/java/es/pablo/periodico/ArticleColumnsCheck.java
+          java -cp app/build/layout-check es.pablo.periodico.ArticleColumnsCheck
       - name: Build APK
         run: ./gradlew --no-daemon :app:assembleDebug
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

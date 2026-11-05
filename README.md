@@ -4,7 +4,7 @@
 
 Periódico personal para Android, pensado para tablets. Portada de varias columnas y anchos distintos, fotografías en escala de grises y lectura de noticias dentro de la app.
 
-[Descargar APK 0.4.0](https://github.com/PabloValencia14/Pliegue/releases/tag/v0.4.0)
+[Descargar APK 0.4.1](https://github.com/PabloValencia14/Pliegue/releases/tag/v0.4.1)
 
 ## Lectura
 
@@ -12,7 +12,7 @@ Periódico personal para Android, pensado para tablets. Portada de varias column
 - Una selección inicial por temas y más noticias al bajar, sin duplicar enlaces ya mostrados. Cuando se agota el catálogo descargado se comprueban nuevas publicaciones; si no las hay, se indica y se puede reintentar.
 - Resumen al pulsar una noticia y botón «Leer noticia» para abrir la página completa en el visor integrado.
 - Edición guardada en la tablet y actualización diaria con notificación a partir de las 8:00. Android puede retrasarla por ahorro de batería o falta de conexión.
-- Estética de papel y tinta: fotografías y visor en gris, tamaños de titulares distintos y piezas que ocupan varias columnas.
+- Estética de papel y tinta: fotografías y visor en gris, tamaños de titulares distintos y piezas que ocupan varias columnas. Los bloques se miden al ancho real y se reparten para equilibrar las alturas y reducir huecos.
 
 La selección sigue el orden de las fuentes, sin resúmenes generados por IA. Las fuentes tienen un número finito de artículos: la carga continua añade los disponibles y no inventa contenido. La web de un medio puede mostrar anuncios, consentimiento o suscripción. Las fotografías usan caché de memoria y necesitan conexión tras cerrar el proceso.
 
@@ -50,7 +50,7 @@ python tests/check_ui.py emulator-5554
 
 Comprueba fotografías, columnas, resumen, visor interno, vuelta, carga de noticias posteriores al primer lote y giro sin volver al inicio. Solo modifica emuladores. Las capturas se guardan en `app/build/ui-check`.
 
-`NewsImagesCheck.java` contiene 12 comprobaciones del parser de imágenes y `NewsPaginationCheck.java` comprueba paginación, enlaces únicos, fin del catálogo y nuevas publicaciones. Se ejecutan con el runtime Android mediante `app_process`.
+`ArticleColumnsCheck.java` comprueba anchos y reparto de bloques con alturas desiguales mediante Java estándar. `NewsImagesCheck.java` contiene 12 comprobaciones del parser de imágenes y `NewsPaginationCheck.java` comprueba paginación, enlaces únicos, fin del catálogo y nuevas publicaciones. Se ejecutan con el runtime Android mediante `app_process`.
 
 ## Desarrollo
 
@@ -58,4 +58,4 @@ Proyecto Java, sin bibliotecas adicionales de ejecución ni servidor propio. El 
 
 El tablero del proyecto está en `kanvas.json`; sus instrucciones se encuentran en `.agents/skills/kanvas/SKILL.md`.
 
-La versión de portada y visor fue comprobada en un emulador Android 16 con resolución y densidad equivalentes a una Pad 7. La instalación física de esta actualización y la ejecución nocturna automática siguen pendientes de comprobar.
+Las versiones 0.4.0 y 0.4.1 se han probado en una Pad 7 con Android 16: portada, fotos, lector interno, carga de más noticias y giro. También se ha forzado una actualización en segundo plano, que generó la notificación sin abrir la app. La ejecución nocturna automática sigue pendiente de observar.

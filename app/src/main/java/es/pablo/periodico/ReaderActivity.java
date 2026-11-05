@@ -59,13 +59,23 @@ public class ReaderActivity extends Activity {
         back.setGravity(Gravity.CENTER_VERTICAL);
         back.setPadding(0, 0, dp(24), 0);
         back.setOnClickListener(view -> finish());
+        InkAppearance.accent(back);
         bar.addView(back);
         source = text("Pliegue", 14, false);
         source.setMaxLines(1);
         source.setEllipsize(android.text.TextUtils.TruncateAt.END);
         bar.addView(source, new LinearLayout.LayoutParams(0, -2, 1));
         status = text("Cargando…", 13, false);
+        InkAppearance.accent(source);
+        InkAppearance.accent(status);
         bar.addView(status);
+        TextView appearance = text("Aspecto", 14, false);
+        appearance.setMinHeight(dp(52));
+        appearance.setGravity(Gravity.CENTER);
+        appearance.setPadding(dp(16), 0, 0, 0);
+        InkAppearance.accent(appearance);
+        appearance.setOnClickListener(view -> InkAppearance.choose(this));
+        bar.addView(appearance);
         View rule = new View(this);
         rule.setBackgroundColor(ink);
         root.addView(rule, new LinearLayout.LayoutParams(-1, dp(1)));
@@ -177,6 +187,10 @@ public class ReaderActivity extends Activity {
         final String url;
         boolean requested;
         Photo(ImageView view, String url) { this.view = view; this.url = url; }
+    }
+    @Override protected void onResume() {
+        super.onResume();
+        InkAppearance.apply(getWindow().getDecorView());
     }
     @Override protected void onSaveInstanceState(Bundle out) {
         super.onSaveInstanceState(out);

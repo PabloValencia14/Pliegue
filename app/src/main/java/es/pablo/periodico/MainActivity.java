@@ -64,6 +64,7 @@ public class MainActivity extends Activity {
         TextView view = text(value.toUpperCase(spanish), 11, true);
         view.setTypeface(Typeface.create("sans-serif", Typeface.NORMAL));
         view.setLetterSpacing(.10f);
+        InkAppearance.accent(view);
         return view;
     }
     private void rule(LinearLayout host, int height) {
@@ -128,6 +129,12 @@ public class MainActivity extends Activity {
         page.addView(top);
         TextView date = label(DateFormat.getDateInstance(DateFormat.FULL, spanish).format(new Date()));
         top.addView(date, new LinearLayout.LayoutParams(0, -2, 1));
+        TextView appearance = label("Aspecto");
+        appearance.setMinHeight(dp(48));
+        appearance.setGravity(Gravity.CENTER);
+        appearance.setPadding(dp(16), 0, 0, 0);
+        appearance.setOnClickListener(view -> InkAppearance.choose(this));
+        top.addView(appearance);
         TextView settings = label("Temas");
         settings.setMinHeight(dp(48));
         settings.setGravity(Gravity.CENTER);
@@ -192,7 +199,7 @@ public class MainActivity extends Activity {
         restoreY = -1;
         ArrayList<String> selected = new ArrayList<>();
         for (String topic : News.TOPICS)
-            if (getSharedPreferences("settings", 0).getBoolean(topic, true)) selected.add(topic);
+            if (News.enabled(this, topic)) selected.add(topic);
         catalog = new News.Catalog(selected);
         try {
             JSONArray saved = new JSONArray(getSharedPreferences("edition", 0).getString("data", "[]"));
@@ -401,7 +408,7 @@ public class MainActivity extends Activity {
     }
     private void topics() {
         boolean[] selected = new boolean[News.TOPICS.length];
-        for (int i = 0; i < selected.length; i++) selected[i] = getSharedPreferences("settings", 0).getBoolean(News.TOPICS[i], true);
+        for (int i = 0; i < selected.length; i++) selected[i] = News.enabled(this, News.TOPICS[i]);
         AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Temas del periódico")
             .setMultiChoiceItems(News.TOPICS, selected, (d, which, checked) -> selected[which] = checked)
             .setNegativeButton("Cancelar", null).setPositiveButton("Guardar", null).create();
@@ -426,6 +433,10 @@ public class MainActivity extends Activity {
             intent.putExtra("url", url);
             startActivity(intent);
         } else Toast.makeText(this, "Enlace no disponible", Toast.LENGTH_SHORT).show();
+    }
+    @Override protected void onResume() {
+        super.onResume();
+        InkAppearance.apply(getWindow().getDecorView());
     }
     @Override protected void onDestroy() {
         generation++;

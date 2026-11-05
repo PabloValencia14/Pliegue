@@ -57,6 +57,17 @@ while True:
     time.sleep(2)
 assert len({bounds(n)[0] for n in cards}) >= 2, "La apertura no tiene varias columnas"
 screenshot("portada-vertical.png")
+for mode, enabled in [("Tinta a color", True), ("Tinta monocroma", False)]:
+    tree = snapshot()
+    tap(next(n for n in tree.iter("node") if n.attrib.get("text", "").casefold() == "aspecto"))
+    tree = snapshot()
+    tap(next(n for n in tree.iter("node") if n.attrib.get("text") == mode))
+    tree = snapshot()
+    preferences = ET.fromstring(adb("shell", "run-as", "es.pablo.periodico", "cat", "shared_prefs/settings.xml"))
+    assert preferences.find("boolean[@name='color_ink']").attrib["value"] == str(enabled).lower(), "No se conserva el modo de tinta"
+    assert tree.find(".//node[@text='Pliegue']") is not None, "El cambio de aspecto pierde el periódico"
+    screenshot("portada-color.png" if enabled else "portada-monocroma.png")
+cards = [n for n in tree.iter("node") if n.attrib.get("class") == "android.widget.LinearLayout" and n.attrib.get("clickable") == "true"]
 # Tocar el titular evita depender de la altura que ocupa la fotografía.
 headline = next(n for n in cards[0].iter("node") if n.attrib.get("text"))
 tap(headline)

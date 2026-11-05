@@ -2,8 +2,6 @@ package es.pablo.periodico;
 
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
-import android.graphics.ColorMatrix;
-import android.graphics.ColorMatrixColorFilter;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.LruCache;
@@ -26,8 +24,6 @@ final class ArticleImages {
     private static final LruCache<String,Bitmap> CACHE=new LruCache<String,Bitmap>((int)Math.min(12*1024*1024,Runtime.getRuntime().maxMemory()/12)) {
         @Override protected int sizeOf(String key, Bitmap bitmap) { return bitmap.getByteCount(); }
     };
-    private static final ColorMatrixColorFilter GRAY;
-    static { ColorMatrix matrix=new ColorMatrix(); matrix.setSaturation(0); GRAY=new ColorMatrixColorFilter(matrix); }
     private static final class Request { volatile boolean cancelled; }
 
     static void load(ImageView image, String value) {
@@ -35,7 +31,7 @@ final class ArticleImages {
         Request request=new Request();
         image.setTag(request);
         image.setVisibility(View.INVISIBLE);
-        image.setColorFilter(GRAY);
+        InkAppearance.image(image);
         String url=News.imageUrl(value);
         if (url.isEmpty()) { image.setVisibility(View.GONE); return; }
         Bitmap cached=CACHE.get(url);

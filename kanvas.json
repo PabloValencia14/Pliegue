@@ -50,6 +50,21 @@
           "at": "2026-11-05T21:51:53Z",
           "by": "codex",
           "text": "0.5.0 instalada sin borrar datos en Pad 7: apertura directa y lector nativo sin WebView; noticia completa con 19 bloques y 4 fotos; aviso de texto parcial comprobado. Fotos, carga del segundo lote y giro pasan; orientación automática restaurada. 16 pruebas unitarias correctas."
+        },
+        {
+          "at": "2026-11-05T22:03:26Z",
+          "by": "codex",
+          "text": "Petición nueva: ampliar Actualidad con medios progresistas e Internacional. Se verifican RSS oficiales y se alternarán fuentes para que una sola no ocupe la primera página. Se conserva la selección de Mundo al renombrarla Internacional."
+        },
+        {
+          "at": "2026-11-05T22:18:04Z",
+          "by": "codex",
+          "text": "0.6.0: Actualidad ya carga en Pad 7 nueve medios (incluidos Público y CTXT); Internacional carga cinco fuentes. Primeros seis titulares de seis medios diferentes. RSS/Atom, imágenes CTXT, paginación y preferencias Mundo/Internacional comprobados en runtime Android. Añadido selector Aspecto con tinta monocroma y tinta a color; validación visual en curso."
+        },
+        {
+          "at": "2026-11-05T22:22:52Z",
+          "by": "codex",
+          "text": "0.6.0 comprobada: 9 medios Actualidad, 5 Internacional; 23 pruebas JVM y comprobaciones Android de RSS/Atom/fotos/paginación/preferencias correctas. Modo tinta a color y mono medidos sobre píxeles de fotos en portada y lector; sin perder posición, al volver ni al girar. Pad 7 queda en modo color, orientación automática restaurada y sin errores recientes. Capturas finales actualizadas. Preparada publicación bajo PabloValencia14."
         }
       ]
     }

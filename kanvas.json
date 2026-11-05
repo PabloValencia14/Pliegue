@@ -1,0 +1,32 @@
+{
+  "kanvas": 1,
+  "title": "periodico",
+  "groups": [],
+  "tasks": [
+    {
+      "id": "G-01",
+      "title": "Publicar Pliegue con lectura continua",
+      "state": "proposed",
+      "at": "2026-11-05T17:05:07Z",
+      "by": "codex",
+      "desc": "Publicar el código y una APK descargable en GitHub, incluyendo la carga progresiva de noticias al bajar y conservando el diseño de periódico. Validar compilación, recorrido de lectura y ausencia de archivos privados.",
+      "notes": [
+        {
+          "at": "2026-11-05T17:05:36Z",
+          "by": "codex",
+          "text": "El usuario ha autorizado la publicación y la carga continua en la conversación. El desarrollo y la publicación siguen adelante conforme a su instrucción de que el tablero no detenga trabajo autorizado; la tarjeta queda disponible para su gestión y revisión en el tablero."
+        },
+        {
+          "at": "2026-11-05T17:15:48Z",
+          "by": "codex",
+          "text": "Código listo: portada asimétrica, lector interno, marca Pliegue y carga progresiva con fotos próximas al área visible. Compilación Android 0.4.0 correcta y pruebas del parser/catálogo superadas. Revisión de publicación sin secretos ni configuración privada. Se están terminando las comprobaciones de scroll y giro en emulador antes de publicar."
+        },
+        {
+          "at": "2026-11-05T17:16:18Z",
+          "by": "codex",
+          "text": "Validación funcional completada en emulador Android 16: fotos, columnas, resumen, visor interno, vuelta, segundo lote al bajar y giro sin regresar al inicio. Se publica la versión de desarrollo 0.4.0 en PabloValencia14/Pliegue. La prueba física en la Pad y la ejecución nocturna siguen pendientes."
+        }
+      ]
+    }
+  ]
+}

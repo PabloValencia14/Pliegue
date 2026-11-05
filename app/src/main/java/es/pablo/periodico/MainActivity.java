@@ -9,7 +9,6 @@ import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Rect;
 import android.graphics.Typeface;
-import android.graphics.drawable.ColorDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -105,7 +104,7 @@ public class MainActivity extends Activity {
             JSONArray cached = new JSONArray(getSharedPreferences("edition", 0).getString("data", "[]"));
             needsImages = cached.length() > 0 && !cached.getJSONObject(0).has("image");
         } catch (JSONException ignored) { needsImages = true; }
-        if (state == null && (needsImages || !News.today().equals(getSharedPreferences("edition", 0).getString("date", "")))) refresh();
+        if (state == null && (getSharedPreferences("edition", 0).getInt("catalog_version", 0) != News.CATALOG_VERSION || needsImages || !News.today().equals(getSharedPreferences("edition", 0).getString("date", "")))) refresh();
     }
     private void render() {
         LinearLayout root = new LinearLayout(this);
@@ -346,7 +345,7 @@ public class MainActivity extends Activity {
         LinearLayout block = new LinearLayout(this);
         block.setOrientation(LinearLayout.VERTICAL);
         block.setPadding(0, dp(prominence == 0 ? 18 : 14), 0, dp(18));
-        block.setOnClickListener(view -> detail(article));
+        block.setOnClickListener(view -> openArticle(article));
         TextView title = text(article.optString("title"), prominence == 0 ? 36 : prominence == 1 ? 25 : 21, true);
         title.setLineSpacing(dp(2), 1f);
         block.addView(title);
@@ -419,38 +418,14 @@ public class MainActivity extends Activity {
         }));
         dialog.show();
     }
-    private void detail(JSONObject article) {
-        String summary = article.optString("summary").trim();
-        if (summary.isEmpty()) summary = "Este medio no ha incluido un resumen en su fuente. Puedes abrir la noticia completa.";
-        LinearLayout panel = new LinearLayout(this);
-        panel.setOrientation(LinearLayout.VERTICAL);
-        panel.setPadding(dp(26), dp(24), dp(26), dp(8));
-        TextView source = label(article.optString("source"));
-        panel.addView(source);
-        TextView title = text(article.optString("title"), 27, true);
-        title.setPadding(0, dp(16), 0, dp(16));
-        panel.addView(title);
-        rule(panel, 1);
-        TextView body = text(summary, 18, false);
-        body.setLineSpacing(dp(4), 1f);
-        body.setPadding(0, dp(16), 0, dp(12));
-        panel.addView(body);
-        ScrollView wrapper = new ScrollView(this);
-        wrapper.addView(panel);
-        AlertDialog dialog = new AlertDialog.Builder(this).setView(wrapper).setNegativeButton("Cerrar", null)
-            .setPositiveButton("Leer noticia", (d, which) -> {
-                String url = article.optString("link");
-                Uri uri = Uri.parse(url);
-                if ("https".equalsIgnoreCase(uri.getScheme()) && uri.getHost() != null) {
-                    Intent intent = new Intent(this, ReaderActivity.class);
-                    intent.putExtra("url", url);
-                    intent.putExtra("source", article.optString("source"));
-                    startActivity(intent);
-                } else Toast.makeText(this, "Enlace no disponible", Toast.LENGTH_SHORT).show();
-            }).create();
-        dialog.show();
-        dialog.getWindow().setBackgroundDrawable(new ColorDrawable(paper));
-        dialog.getWindow().setLayout(Math.min(dp(680), getResources().getDisplayMetrics().widthPixels - dp(40)), -2);
+    private void openArticle(JSONObject article) {
+        String url = article.optString("link");
+        Uri uri = Uri.parse(url);
+        if ("https".equalsIgnoreCase(uri.getScheme()) && uri.getHost() != null) {
+            Intent intent = new Intent(this, ReaderActivity.class);
+            intent.putExtra("url", url);
+            startActivity(intent);
+        } else Toast.makeText(this, "Enlace no disponible", Toast.LENGTH_SHORT).show();
     }
     @Override protected void onDestroy() {
         generation++;

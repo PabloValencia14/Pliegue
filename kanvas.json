@@ -35,6 +35,21 @@
           "at": "2026-11-05T18:16:19Z",
           "by": "codex",
           "text": "Corrección0.4.1 instalada y probada en la Pad7: composición por alturas medidas, aperturas y fotos variables, menor espacio vacío. Prueba física de fotos, resumen, visor, segundo lote, giro y restauración de orientación pasada. Prueba Java de anchos/reparto y revisión independiente correctas. Sin nuevos cierres de la app en los registros de la sesión."
+        },
+        {
+          "at": "2026-11-05T20:03:45Z",
+          "by": "codex",
+          "text": "Nuevo cambio solicitado: pulsación directa a lector nativo de texto/fotos y más variedad de temas. Se retira WebView y resumen modal; se amplían las fuentes verificadas a14 temas manteniendo preferencias previas. Se valida extracción de contenido público, identificación de texto parcial y exclusión de publicidad/relacionadas."
+        },
+        {
+          "at": "2026-11-05T21:49:30Z",
+          "by": "codex",
+          "text": "El usuario ha corregido el destino: conservar PabloValencia14/Pliegue. Traslado a pablovalencia1404 cancelado y comprobado en los ajustes de GitHub. Lector nativo y 14 temas compilados; pruebas en la Pad 7 en curso."
+        },
+        {
+          "at": "2026-11-05T21:51:53Z",
+          "by": "codex",
+          "text": "0.5.0 instalada sin borrar datos en Pad 7: apertura directa y lector nativo sin WebView; noticia completa con 19 bloques y 4 fotos; aviso de texto parcial comprobado. Fotos, carga del segundo lote y giro pasan; orientación automática restaurada. 16 pruebas unitarias correctas."
         }
       ]
     }

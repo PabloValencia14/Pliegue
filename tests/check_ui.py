@@ -60,23 +60,22 @@ screenshot("portada-vertical.png")
 # Tocar el titular evita depender de la altura que ocupa la fotografía.
 headline = next(n for n in cards[0].iter("node") if n.attrib.get("text"))
 tap(headline)
-tree = snapshot()
-read = next((n for n in tree.iter("node") if n.attrib.get("text", "").casefold() == "leer noticia"), None)
-assert read is not None, "No aparece Leer noticia en el resumen"
-screenshot("resumen.png")
-tap(read)
-deadline = time.monotonic() + 30
+deadline = time.monotonic() + 75
 while True:
     tree = snapshot()
-    if tree.find(".//node[@class='android.webkit.WebView']") is not None:
+    assert tree.find(".//node[@class='android.webkit.WebView']") is None, "El lector sigue usando una vista web"
+    assert not any(n.attrib.get("text", "").casefold() == "leer noticia" for n in tree.iter("node")), "Sigue apareciendo un paso intermedio"
+    paragraphs = [n for n in tree.iter("node") if n.attrib.get("class") == "android.widget.TextView" and len(n.attrib.get("text", "")) >= 160]
+    if paragraphs:
         break
-    assert time.monotonic() < deadline, "No aparece el visor interno"
-    time.sleep(1)
+    assert time.monotonic() < deadline, "No aparece contenido de la noticia en el lector nativo"
+    time.sleep(2)
 activity = adb("shell", "dumpsys", "activity", "activities")
 assert re.search(r"(?:mResumedActivity|topResumedActivity).*es\.pablo\.periodico/\.ReaderActivity", activity), "Se ha abierto otra app"
+assert tree.find(".//node[@class='android.widget.ImageView']") is not None, "Falta la fotografía en el lector nativo"
 back = next(n for n in tree.iter("node") if "VOLVER" in n.attrib.get("text", ""))
 assert bounds(back)[1] > 0, "Volver ocupa el borde de la barra de estado"
-screenshot("visor.png")
+screenshot("lector-nativo.png")
 tap(back)
 tree = snapshot()
 assert tree.find(".//node[@text='Pliegue']") is not None, "Volver no regresa al periódico"
@@ -120,4 +119,4 @@ assert tree.find(".//node[@text='Pliegue']") is None, "Al girar desde noticias p
 assert tree.find(".//node[@text='Aún no hay noticias. Pulsa Actualizar para preparar la edición.']") is None, "Al girar se pierde el catálogo"
 screenshot("carga-continua-giro.png")
 adb("shell", "wm", "user-rotation", "lock", "0")
-print("OK: fotos, columnas, resumen, visor interno, vuelta, carga de un segundo lote y giro sin volver al inicio. Capturas:", output)
+print("OK: fotos, columnas, apertura directa, lector nativo, vuelta, carga de un segundo lote y giro sin volver al inicio. Capturas:", output)

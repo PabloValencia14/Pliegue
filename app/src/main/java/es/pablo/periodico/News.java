@@ -14,28 +14,73 @@ import java.util.regex.Pattern;
 
 public class News {
     static final int MAX_ARTICLES_PER_TOPIC = 60;
-    static final String[] TOPICS = {"Actualidad", "Mundo", "Tecnología", "Ciencia", "Fórmula 1"};
-    static final String[] SOURCES = {"El País", "BBC Mundo", "Xataka", "El País", "Motorsport.com"};
-    static final String[] FEEDS = {"https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/portada", "https://feeds.bbci.co.uk/mundo/rss.xml", "https://www.xataka.com/index.xml", "https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/section/ciencia/portada", "https://es.motorsport.com/rss/f1/news/"};
+    static final int CATALOG_VERSION = 2;
+    static final String[] TOPICS = {"Actualidad", "Mundo", "Tecnología", "Ciencia", "Fórmula 1", "Política", "Economía", "Android", "Inteligencia artificial", "Software libre", "Seguridad digital", "Medioambiente", "Cultura", "Videojuegos"};
+    static final String[] SOURCES = {"El País", "BBC Mundo", "Xataka", "El País", "Motorsport.com", "elDiario.es", "El País", "Xataka Android", "Xataka", "MuyLinux", "Hispasec", "Climática", "El País", "MeriStation"};
+    static final String[] FEEDS = {
+        "https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/portada",
+        "https://feeds.bbci.co.uk/mundo/rss.xml",
+        "https://www.xataka.com/index.xml",
+        "https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/section/ciencia/portada",
+        "https://es.motorsport.com/rss/f1/news/",
+        "https://www.eldiario.es/rss/politica/",
+        "https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/section/economia/portada",
+        "https://www.xatakandroid.com/index.xml",
+        "https://www.xataka.com/tag/inteligencia-artificial/rss2.xml",
+        "https://www.muylinux.com/feed/",
+        "https://unaaldia.hispasec.com/feed",
+        "https://climatica.coop/feed/",
+        "https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/section/cultura/portada",
+        "https://as.com/rss/meristation/portada.xml"
+    };
     static JSONArray fetch(Context context) {
-        JSONArray result = new JSONArray();
-        boolean[] selected = new boolean[TOPICS.length];
-        for (int i=0; i<TOPICS.length; i++) selected[i]=context.getSharedPreferences("settings", 0).getBoolean(TOPICS[i], true);
-        for (int i=0; i<FEEDS.length; i++) {
-            if (!selected[i]) continue;
-            HttpURLConnection connection = null;
-            try {
-                connection = (HttpURLConnection) new URL(FEEDS[i]).openConnection();
-                connection.setConnectTimeout(12000); connection.setReadTimeout(12000);
-                connection.setRequestProperty("User-Agent", "Mozilla/5.0 Periodico/1.0");
-                try (java.io.InputStream input = connection.getInputStream()) {
-                    XmlPullParser p = Xml.newPullParser(); p.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, false); p.setInput(input, null);
-                    JSONArray articles = readFeed(p, TOPICS[i], SOURCES[i]);
-                    for (int n=0; n<articles.length(); n++) result.put(articles.getJSONObject(n));
-                }
-            } catch (Exception ignored) {} finally { if (connection!=null) connection.disconnect(); }
+        ArrayList<java.util.concurrent.Callable<JSONArray>> tasks = new ArrayList<>();
+        for (int i = 0; i < FEEDS.length; i++) {
+            final int index = i;
+            if (context.getSharedPreferences("settings", 0).getBoolean(TOPICS[i], true))
+                tasks.add(() -> fetchFeed(index));
         }
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(4);
+        JSONArray result = new JSONArray();
+        try {
+            for (java.util.concurrent.Future<JSONArray> future : pool.invokeAll(tasks, 45, java.util.concurrent.TimeUnit.SECONDS)) {
+                if (future.isCancelled()) continue;
+                try {
+                    JSONArray articles = future.get();
+                    for (int n = 0; n < articles.length(); n++) result.put(articles.getJSONObject(n));
+                } catch (Exception ignored) { }
+            }
+        } catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); }
+        finally { pool.shutdownNow(); }
         return mergeSaved(result, new JSONArray());
+    }
+    private static JSONArray fetchFeed(int index) {
+        HttpURLConnection connection = null;
+        try {
+            connection = (HttpURLConnection) new URL(FEEDS[index]).openConnection();
+            connection.setConnectTimeout(10000);
+            connection.setReadTimeout(10000);
+            connection.setRequestProperty("User-Agent", "Mozilla/5.0 Pliegue/0.5");
+            try (java.io.InputStream input = new java.io.FilterInputStream(connection.getInputStream()) {
+                int bytes;
+                @Override public int read() throws java.io.IOException {
+                    int value = super.read();
+                    if (value != -1 && ++bytes > 4 * 1024 * 1024) throw new java.io.IOException("RSS demasiado grande");
+                    return value;
+                }
+                @Override public int read(byte[] buffer, int offset, int length) throws java.io.IOException {
+                    int count = in.read(buffer, offset, length);
+                    if (count > 0 && (bytes += count) > 4 * 1024 * 1024) throw new java.io.IOException("RSS demasiado grande");
+                    return count;
+                }
+            }) {
+                XmlPullParser parser = Xml.newPullParser();
+                parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, false);
+                parser.setInput(input, null);
+                return readFeed(parser, TOPICS[index], SOURCES[index]);
+            }
+        } catch (Exception ignored) { return new JSONArray(); }
+        finally { if (connection != null) connection.disconnect(); }
     }
     static JSONArray readFeed(XmlPullParser p, String topic, String source) throws Exception {
                 JSONArray result = new JSONArray();
@@ -59,7 +104,10 @@ public class News {
                             if (image.isEmpty()) image=htmlImage(description);
                             if (image.isEmpty()) image=htmlImage(content);
                             if (!title.trim().isEmpty() && link.startsWith("https://") && links.add(link.trim())) {
-                                JSONObject article=new JSONObject(); article.put("title",Html.fromHtml(title,Html.FROM_HTML_MODE_COMPACT).toString().trim()); article.put("link",link.trim()); article.put("summary",clean); article.put("topic",topic); article.put("source",source); article.put("image",image); result.put(article); if (++count>=MAX_ARTICLES_PER_TOPIC) break;
+                                JSONObject article=new JSONObject(); article.put("title",Html.fromHtml(title,Html.FROM_HTML_MODE_COMPACT).toString().trim()); article.put("link",link.trim()); article.put("summary",clean.substring(0, Math.min(600, clean.length()))); article.put("topic",topic); article.put("source",source); article.put("image",image);
+                                String body = content.trim().isEmpty() ? description : content;
+                                article.put("body", count < 20 && body.length() <= 120000 ? body : "");
+                                result.put(article); if (++count>=MAX_ARTICLES_PER_TOPIC) break;
                             }
                         } tag="";
                     }
@@ -98,7 +146,7 @@ public class News {
         android.content.SharedPreferences edition=context.getSharedPreferences("edition",0);
         JSONArray previous;
         try { previous=new JSONArray(edition.getString("data","[]")); } catch (Exception ignored) { previous=new JSONArray(); }
-        edition.edit().putString("data",mergeSaved(data,previous).toString()).putString("date",today()).apply();
+        edition.edit().putString("data",mergeSaved(data,previous).toString()).putString("date",today()).putInt("catalog_version",CATALOG_VERSION).apply();
     }
     static JSONArray mergeSaved(JSONArray fresh, JSONArray previous) {
         Catalog catalog=new Catalog(Arrays.asList(TOPICS));

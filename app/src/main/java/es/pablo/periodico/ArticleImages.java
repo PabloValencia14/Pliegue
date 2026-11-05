@@ -35,7 +35,6 @@ final class ArticleImages {
         Request request=new Request();
         image.setTag(request);
         image.setVisibility(View.INVISIBLE);
-        image.setScaleType(ImageView.ScaleType.CENTER_CROP);
         image.setColorFilter(GRAY);
         String url=News.imageUrl(value);
         if (url.isEmpty()) { image.setVisibility(View.GONE); return; }

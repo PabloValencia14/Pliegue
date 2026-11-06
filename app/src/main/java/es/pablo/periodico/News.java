@@ -14,8 +14,10 @@ import java.util.regex.Pattern;
 
 public class News {
     static final int MAX_ARTICLES_PER_TOPIC = 60;
-    static final int CATALOG_VERSION = 3;
+    static final int CATALOG_VERSION = 4;
     static final String[] TOPICS = {"Actualidad", "Internacional", "Tecnología", "Ciencia", "Fórmula 1", "Política", "Economía", "Android", "Inteligencia artificial", "Software libre", "Seguridad digital", "Medioambiente", "Cultura", "Videojuegos"};
+    // These publishers supply full articles in RSS descriptions as well as content:encoded.
+    private static final Set<String> FULL_TEXT_FEEDS = new HashSet<>(Arrays.asList("elDiario.es", "infoLibre", "Xataka", "Xataka Android", "La Marea", "ElPlural", "MuyLinux", "Hispasec", "Climática", "VidaExtra"));
     static final class Feed {
         final String topic, source, url;
         Feed(String topic, String source, String url) { this.topic = topic; this.source = source; this.url = url; }
@@ -46,7 +48,7 @@ public class News {
         new Feed("Seguridad digital", "Hispasec", "https://unaaldia.hispasec.com/feed"),
         new Feed("Medioambiente", "Climática", "https://climatica.coop/feed/"),
         new Feed("Cultura", "El País", "https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/section/cultura/portada"),
-        new Feed("Videojuegos", "MeriStation", "https://as.com/rss/meristation/portada.xml")
+        new Feed("Videojuegos", "VidaExtra", "https://www.vidaextra.com/index.xml")
     };
     static boolean enabled(Context context, String topic) {
         android.content.SharedPreferences settings = context.getSharedPreferences("settings", 0);
@@ -90,7 +92,7 @@ public class News {
             connection = (HttpURLConnection) new URL(FEEDS[index].url).openConnection();
             connection.setConnectTimeout(10000);
             connection.setReadTimeout(10000);
-            connection.setRequestProperty("User-Agent", "Mozilla/5.0 Pliegue/0.6");
+            connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:137.0) Gecko/20100101 Firefox/137.0");
             try (java.io.InputStream input = new java.io.FilterInputStream(connection.getInputStream()) {
                 int bytes;
                 @Override public int read() throws java.io.IOException {
@@ -173,6 +175,8 @@ public class News {
                                 JSONObject article=new JSONObject(); article.put("title",Html.fromHtml(title,Html.FROM_HTML_MODE_COMPACT).toString().trim()); article.put("link",link.trim()); article.put("summary",clean.substring(0, Math.min(600, clean.length()))); article.put("topic",topic); article.put("source",source); article.put("image",image);
                                 String body = content.trim().isEmpty() ? description : content;
                                 article.put("body", count < 20 && body.length() <= 120000 ? body : "");
+                                article.put("body_kind", content.trim().isEmpty() ? "description" : "content");
+                                article.put("body_full", !article.optString("body").isEmpty() && FULL_TEXT_FEEDS.contains(source));
                                 result.put(article); if (++count>=MAX_ARTICLES_PER_TOPIC) break;
                             }
                         } tag="";
@@ -235,11 +239,15 @@ public class News {
             for (int i=0;i<data.length();i++) {
                 JSONObject article=data.optJSONObject(i);
                 if (article==null) continue;
-                if (article.optString("topic").equals("Mundo") || article.optString("summary").indexOf('\ufffc') >= 0) {
+                // The retired MeriStation RSS points to removed pages from 2023.
+                if (article.optString("source").equals("MeriStation")) continue;
+                boolean needsProvenance = !article.optString("body").isEmpty() && !article.has("body_full");
+                if (article.optString("topic").equals("Mundo") || article.optString("summary").indexOf('\ufffc') >= 0 || needsProvenance) {
                     try {
                         article = new JSONObject(article.toString());
                         if (article.optString("topic").equals("Mundo")) article.put("topic", "Internacional");
                         article.put("summary", article.optString("summary").replace('\ufffc', ' ').replaceAll("\\s+", " ").trim());
+                        if (needsProvenance) article.put("body_full", FULL_TEXT_FEEDS.contains(article.optString("source")));
                     }
                     catch (org.json.JSONException invalid) { continue; }
                 }

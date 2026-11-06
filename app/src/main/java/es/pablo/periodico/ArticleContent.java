@@ -7,6 +7,7 @@ import org.json.JSONTokener;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
+import net.dankito.readability4j.extended.Readability4JExtended;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -34,6 +35,7 @@ final class ArticleContent {
     final String title, source, message;
     final List<Block> blocks;
     final boolean limited;
+    private static final int CACHE_VERSION = 5;
     private static final int MAX_DOWNLOAD = 3 * 1024 * 1024, MAX_CACHE_FILE = 1024 * 1024;
     private static final long CACHE_AGE = 24 * 60 * 60 * 1000L, CACHE_BYTES = 8 * 1024 * 1024;
     private static final String RESTRICTED = "Este medio limita el acceso a la noticia. Se muestran únicamente el resumen y la imagen públicos.";
@@ -44,7 +46,10 @@ final class ArticleContent {
     static final class Block {
         final String text, image;
         final boolean heading;
-        private Block(String text, String image, boolean heading) { this.text = text; this.image = image; this.heading = heading; }
+        private final boolean caption, row;
+        private Block(String text, String image, boolean heading) { this(text, image, heading, false); }
+        private Block(String text, String image, boolean heading, boolean caption) { this(text, image, heading, caption, false); }
+        private Block(String text, String image, boolean heading, boolean caption, boolean row) { this.text = text; this.image = image; this.heading = heading; this.caption = caption; this.row = row; }
     }
     private ArticleContent(String title, String source, List<Block> blocks, boolean limited, String message) {
         this.title = title; this.source = source;
@@ -68,35 +73,34 @@ final class ArticleContent {
         File file = new File(directory, key(url) + ".json");
         ArticleContent cached = readCache(file, url);
         if (cached != null) return cached;
-        String body = metadata.optString("body");
-        if (!body.isEmpty()) {
-            ArticleContent rss = parseRss(body, url, metadata);
-            if (!rss.limited) { writeCache(directory, file, url, rss); return rss; }
-            if (rss.message.equals(RESTRICTED)) return rss;
-        }
-        try {
-            ArticleContent result = parse(download(url), metadata);
-            if (!result.limited) writeCache(directory, file, url, result);
-            return result;
-        } catch (Exception ignored) { return fallback(metadata, url, UNAVAILABLE); }
+        ArticleContent rss = parseRss(metadata.optString("body"), url, metadata);
+        ArticleContent page;
+        try { page = parse(download(url), metadata); }
+        catch (Exception ignored) { page = fallback(metadata, url, UNAVAILABLE); }
+        ArticleContent result = preferred(page, rss);
+        if (!result.limited) writeCache(directory, file, url, result);
+        return result;
     }
 
-    // This entry point needs only Jsoup and org.json, so extraction can be checked on a regular JVM.
+    // The publisher's explicit RSS content is a separate public source, including when its website has a wall.
+    static ArticleContent preferred(ArticleContent page, ArticleContent rss) {
+        if (page.limited != rss.limited) return page.limited ? rss : page;
+        if (page.message.equals(RESTRICTED)) return page;
+        return textLength(rss) > textLength(page) ? rss : page;
+    }
+    private static int textLength(ArticleContent content) {
+        int length = 0; for (Block block : content.blocks) if (!block.caption) length += block.text.length(); return length;
+    }
+    // These entry points also run on the JVM with Readability4J, Jsoup and org.json.
     static ArticleContent parse(String html, String url, JSONObject metadata) {
         return parse(Jsoup.parse(html, url), metadata);
     }
     static ArticleContent parseRss(String body, String url, JSONObject metadata) {
-        ArticleContent content = parse("<article>" + body + "</article>", url, metadata);
-        if (content.limited) return content;
-        Document fragment = Jsoup.parseBodyFragment(body, url);
-        for (Element link : fragment.select("a"))
-            if (link.text().trim().toLowerCase(Locale.ROOT).matches("(?s)^(seguir leyendo|continuar leyendo|leer m[aá]s|leer noticia completa|read more|continue reading).*")) return fallback(metadata, url, UNAVAILABLE);
-        clean(fragment);
-        int paragraphs = 0, characters = 0;
-        for (Element paragraph : fragment.select("p"))
-            if (paragraph.closest("figcaption") == null && paragraph.text().length() >= 80) { paragraphs++; characters += paragraph.text().length(); }
-        // RSS descriptions may be long teasers, so their length alone does not establish a full article.
-        return paragraphs >= 2 && characters > plain(metadata.optString("summary")).length() + 120 ? content : fallback(metadata, url, UNAVAILABLE);
+        Document fragment = Jsoup.parse(body, url);
+        ArticleContent content = parse(fragment.select("article").isEmpty() ? Jsoup.parse("<article>" + body + "</article>", url) : fragment, metadata);
+        if (content.limited || "content".equals(metadata.optString("body_kind")) || metadata.optBoolean("body_full")) return content;
+        // A description (or an old edition without provenance) can be a multi-paragraph teaser.
+        return new ArticleContent(content.title, content.source, content.blocks, true, UNAVAILABLE);
     }
     private static ArticleContent parse(Document document, JSONObject metadata) {
         String url = document.baseUri();
@@ -109,26 +113,81 @@ final class ArticleContent {
             info.put("summary", first(metadata.optString("summary"), meta(document, "og:description"), meta(document, "description"), article.optString("description")));
             info.put("image", first(https(metadata.optString("image"), url), https(meta(document, "og:image"), url), structuredImage(article.opt("image"), url)));
         } catch (Exception ignored) {}
-        if (restricted(metadata) || restricted(article) || restrictedPage(document)) return fallback(info, url, RESTRICTED);
-        clean(document);
-        Element root = bodyRoot(document, plain(info.optString("title")));
-        Extraction visible = extract(root, url);
+        Element root = bodyRoot(document, plain(info.optString("title")), article);
+        if (restricted(metadata) || restricted(article) || restrictedPage(document, plain(info.optString("title")))) return fallback(info, url, RESTRICTED);
+        boolean teaser = root != null && hasTeaser(root);
+        Extraction visible = readable(root, url);
         String body = article.optString("articleBody");
         Extraction structured = new Extraction();
         if (!body.isEmpty()) {
+            if (host(url) != null && (host(url).equals("nuevatribuna.es") || host(url).endsWith(".nuevatribuna.es")))
+                body = body.replaceFirst("(?is)^Necesitamos tu ayuda para seguir informando\\s+Colabora con Nuevatribuna\\s*", "");
             Document fragment = Jsoup.parseBodyFragment(body.contains("<") ? body : paragraphs(body), url);
             clean(fragment);
             structured = extract(fragment.body(), url);
         }
         Extraction content = visible;
-        if (!substantial(visible) && substantial(structured)) content = structured;
-        if (!substantial(content)) return fallback(info, url, UNAVAILABLE);
-        boolean hasPhoto = false;
-        for (Block block : content.blocks) hasPhoto |= !block.image.isEmpty();
+        if (substantial(structured) && structured.characters > visible.characters) content = structured;
+        boolean imageOnly = root != null && root.hasAttr("data-reader-image-only") && !visible.images.isEmpty();
+        if (!substantial(content) && !imageOnly) return fallback(info, url, UNAVAILABLE);
+        if (content != visible) restoreStructure(content, visible);
         String image = https(info.optString("image"), url);
-        if (!hasPhoto && !image.isEmpty()) content.blocks.add(0, new Block("", image, false));
-        return new ArticleContent(plain(info.optString("title")), plain(info.optString("source")), content.blocks, content.truncated,
-            content.truncated ? "El texto supera el límite del lector. Se muestra una parte del artículo." : "");
+        if (!image.isEmpty() && content.images.add(image)) content.blocks.add(0, new Block("", image, false));
+        cap(content);
+        boolean limited = content.truncated || teaser;
+        return new ArticleContent(plain(info.optString("title")), plain(info.optString("source")), content.blocks, limited,
+            content.truncated ? "El texto supera el límite del lector. Se muestra una parte del artículo." : teaser ? UNAVAILABLE : "");
+    }
+
+    private static Extraction readable(Element root, String url) {
+        if (root == null) return new Extraction();
+        clean(root);
+        Extraction original = extract(root, url);
+        try {
+            Element readable = new Readability4JExtended(url, "<html><body>" + root.outerHtml() + "</body></html>").parse().getArticleContent();
+            if (readable == null) return original;
+            clean(readable);
+            Extraction result = extract(readable, url);
+            // A named editorial body already excludes cards; retain prose the scoring engine prunes from it.
+            if (root.hasAttr("data-reader-body") && original.characters > result.characters || !substantial(result) && substantial(original)) return original;
+            restoreStructure(result, original);
+            return result;
+        } catch (Exception ignored) { return original; }
+    }
+    private static void restoreStructure(Extraction content, Extraction original) {
+        content.blocks.removeIf(block -> !block.image.isEmpty() || block.caption || block.row);
+        content.images.clear();
+        for (int i = 0; i < original.blocks.size(); i++) {
+            Block block = original.blocks.get(i);
+            if (block.image.isEmpty() && !block.caption && !block.row) continue;
+            int position = content.blocks.size();
+            for (int j = i + 1; j < original.blocks.size(); j++) {
+                Block next = original.blocks.get(j);
+                if (next.text.isEmpty() || next.caption || next.row) continue;
+                int found = -1;
+                for (int k = 0; k < content.blocks.size(); k++) if (content.blocks.get(k).text.equals(next.text)) { found = k; break; }
+                if (found >= 0) { position = found; break; }
+            }
+            if (block.image.isEmpty() || content.images.add(block.image)) content.blocks.add(position, block);
+        }
+        if (content.blocks.size() > 250) { content.blocks.subList(250, content.blocks.size()).clear(); content.truncated = true; }
+        content.characters = 0; content.paragraphs = 0;
+        for (Block block : content.blocks) { content.characters += block.text.length(); if (!block.text.isEmpty() && !block.heading && !block.caption) content.paragraphs++; }
+    }
+
+    private static void cap(Extraction content) {
+        int characters = 0;
+        for (int i = 0; i < content.blocks.size(); i++) {
+            Block block = content.blocks.get(i);
+            if (i >= 250 || characters + block.text.length() > 180000) {
+                if (i < 250 && characters < 180000 && !block.text.isEmpty()) {
+                    content.blocks.set(i, new Block(block.text.substring(0, 180000 - characters), "", block.heading, block.caption, block.row));
+                    i++;
+                }
+                content.blocks.subList(i, content.blocks.size()).clear(); content.truncated = true; return;
+            }
+            characters += block.text.length();
+        }
     }
 
     private static JSONObject structuredArticle(Document document, String url) {
@@ -178,44 +237,116 @@ final class ArticleContent {
         }
         return false;
     }
-    private static boolean restrictedPage(Document document) {
-        if (!document.select("[itemprop=isAccessibleForFree][content=false], [data-paywall=true], [data-premium=true], [data-is-accessible-for-free=false]").isEmpty()) return true;
+    private static boolean restrictedPage(Document document, String title) {
+        Element currentArticle = null;
+        for (Element heading : document.select("article h1")) if (!title.isEmpty() && heading.text().equalsIgnoreCase(title)) currentArticle = heading.closest("article");
         String tier = meta(document, "article:content_tier").toLowerCase(Locale.ROOT);
         if (tier.equals("locked") || tier.equals("premium") || tier.equals("metered")) return true;
-        for (Element element : document.select("[id*=paywall], [class*=paywall], .subscription-wall"))
-            if (element.text().toLowerCase(Locale.ROOT).matches("(?s).*(suscr[ií]b|suscriptor|subscribe|subscription|sign in|inicia sesi[oó]n|premium).*$")) return true;
+        for (Element element : document.select("[itemprop=isAccessibleForFree][content=false], [data-paywall=true], [data-premium=true], [data-is-accessible-for-free=false], [id*=paywall], [class*=paywall], .subscription-wall")) {
+            if (element.closest("nav, footer, [class*=comment]") != null) continue;
+            Element owner = element.closest("article");
+            if (owner != null && currentArticle != null && owner != currentArticle) continue;
+            String text = element.text().toLowerCase(Locale.ROOT);
+            boolean aside = element.closest("aside") != null;
+            if (!aside && (element.hasAttr("data-paywall") || element.hasAttr("data-premium") || element.hasAttr("data-is-accessible-for-free") || element.attr("itemprop").equals("isAccessibleForFree"))) return true;
+            if (invisible(element)) continue;
+            if (text.matches("(?s).*(?:art[ií]culo|contenido|article|content) exclusivo para (?:socias|socios|suscriptores|miembros|subscribers).*")) return true;
+            if (aside) continue;
+            if (text.matches("(?s).*(seguir leyendo|continuar leyendo|para leer|para acceder|to read|continue reading|contenido exclusivo|solo para suscriptores|only for subscribers).*")) return true;
+        }
+        return false;
+    }
+    private static boolean invisible(Element element) {
+        for (Element current = element; current != null; current = current.parent())
+            if (current.hasAttr("hidden") || current.hasAttr("inert") || current.attr("aria-hidden").equals("true") || HIDDEN.matcher(current.attr("style")).find()) return true;
+        return false;
+    }
+    private static final Pattern TEASER = Pattern.compile("(?i)^(?:(?:seguir|sigue|continuar|contin[uú]a) leyendo|(?:leer|lee) m[aá]s|(?:leer|lee) (?:la )?(?:noticia|art[ií]culo) complet[oa]|read more|continue reading|read (?:the )?full (?:article|story))(?:\\s+(?:en|on)\\s+[\\p{L}\\p{N}. -]{2,80})?[\\s.…!>»]*$");
+    private static boolean teaserLink(Element link) {
+        if (!TEASER.matcher(link.text().trim()).matches()) return false;
+        Element paragraph = link.closest("p, li");
+        return paragraph == null || TEASER.matcher(paragraph.text().trim()).matches();
+    }
+    private static boolean hasTeaser(Element root) {
+        for (Element link : root.select("a")) if (!excluded(link, root) && teaserLink(link)) return true;
+        return false;
+    }
+    private static boolean clutter(Element element) {
+        return CLUTTER.matcher(element.id() + " " + element.className() + " " + element.attr("aria-labelledby") + " "
+            + element.attr("data-e2e") + " " + element.attr("data-component") + " " + element.attr("data-testid")).find();
+    }
+    private static boolean excluded(Element element, Element boundary) {
+        for (Element current = element; current != null && current != boundary; current = current.parent())
+            if (current.normalName().matches("aside|nav|header|footer") || clutter(current) || invisible(current)
+                || current.is(".suscribete, .ficha-autor, .desvio, .article-asset-related, .asset-related, .jp-relatedposts, .donaciones, [class*=author-bio]")
+                || current.normalName().equals("article") && !boundary.hasAttr("data-reader-live")) return true;
         return false;
     }
     private static void clean(Element root) {
-        root.select("script, style, nav, header, footer, aside, form, button, noscript, iframe, svg, canvas, [hidden], [aria-hidden=true], [inert], [role=navigation], [role=banner], [role=contentinfo], .sr-only, .visually-hidden").remove();
+        root.select("script, style, nav, header, footer, aside, form, button, noscript, iframe, svg, canvas, [hidden], [aria-hidden=true], [inert], [role=navigation], [role=banner], [role=contentinfo], .sr-only, .visually-hidden, .suscribete, .ficha-autor, .desvio, .article-asset-related, .asset-related, .zox-post-bot-wrap, .zox-post-tags, .zox-author-thumb, .zox-org-logo, .jp-relatedposts, .donaciones, [class*=author-bio]").remove();
         for (Element element : new ArrayList<>(root.getAllElements())) {
             if (element == root) continue;
-            if (CLUTTER.matcher(element.id() + " " + element.className()).find() || HIDDEN.matcher(element.attr("style")).find()) element.remove();
+            if (clutter(element) || HIDDEN.matcher(element.attr("style")).find()
+                    || element.normalName().equals("article") && element.parent() != null && element.parent().closest("article") != null && !root.hasAttr("data-reader-live")) element.remove();
+        }
+        for (Element box : new ArrayList<>(root.select(".cajita"))) if (!box.select("a[href*=agora.ctxt.es]").isEmpty()) box.remove();
+        for (Element link : new ArrayList<>(root.select("a"))) if (teaserLink(link)) {
+            Element parent = link.parent();
+            if (parent != null && parent != root && parent.normalName().matches("p|li") && TEASER.matcher(parent.text().trim()).matches()) parent.remove();
+            else link.remove();
+        }
+        for (Element element : new ArrayList<>(root.select("p, h2, h3, h4"))) {
+            String text = element.text().trim();
+            if (text.matches("(?is)^Este art[ií]culo fue originalmente publicado en .*")) element.remove();
+            else if (!element.select("a").isEmpty() && text.matches("(?is)^(?:La noticia|El art[ií]culo|La entrada|The post) .*(?:fue publicad[oa]|es original de|se public[oó] primero en|appeared first on).*")) element.remove();
+            else if (!element.select("a").isEmpty() && text.matches("(?is)^(?:(?:En Xataka(?: Android)?|En Mundo Xiaomi|En VidaExtra)\\s*[|:]|(?:Y )?no olvides suscribirte .*newsletter|Suscr[ií]bete a (?:nuestro|la) (?:newsletter|bolet[ií]n)|Necesitamos tu ayuda para seguir informando|Colabora con Nuevatribuna|(?:Tambi[eé]n puedes|Recuerda que puedes) seguirnos en |Descarga la nueva app del BBC World Service).*")) element.remove();
         }
     }
-    private static Element bodyRoot(Document document, String title) {
-        for (String selector : new String[]{"[itemprop=articleBody], .article-body, .article__body, .entry-content, .post-content", "article", "main, [role=main]"}) {
-            List<Element> candidates = document.select(selector);
-            if (selector.equals("article") && candidates.size() > 1) {
-                Element identified = null;
-                for (Element candidate : candidates) {
-                    if (!selectedText(candidate, "h1").equalsIgnoreCase(title) || title.isEmpty()) continue;
-                    if (identified != null) return null;
-                    identified = candidate;
-                }
-                return identified;
-            }
-            Element selected = null; int best = 0;
-            for (Element candidate : candidates) {
-                if ((candidate.normalName().equals("main") || candidate.attr("role").equals("main")) && candidate.select("article").size() > 1) continue;
-                int score = 0;
-                for (Element paragraph : candidate.select("p")) score += paragraph.text().length();
-                for (Element link : candidate.select("a")) score -= link.text().length();
-                if (score > best) { best = score; selected = candidate; }
-            }
-            if (selected != null) return selected;
+    private static Element bodyRoot(Document document, String title, JSONObject schema) {
+        Element canonical = document.selectFirst("link[rel=canonical]");
+        if (schema.optString("@type").contains("LiveBlogPosting") && canonical != null && samePage(canonical.attr("href"), document.baseUri())) {
+            Element main = document.selectFirst("main, [role=main]");
+            if (main != null) return main.clone().attr("data-reader-live", "true");
         }
-        return null;
+        // These layouts split their current story into header/body containers or include nested cards.
+        String domain = first(host(document.baseUri())).toLowerCase(Locale.ROOT);
+        String specific = domain.equals("publico.es") || domain.endsWith(".publico.es") ? "article #body-modules"
+            : domain.equals("ctxt.es") || domain.endsWith(".ctxt.es") ? "article.articulo .articulo__body, article.articulo--vineta"
+            : domain.equals("elsaltodiario.com") || domain.endsWith(".elsaltodiario.com") ? "#contenido-principal-articulo"
+            : domain.equals("climatica.coop") || domain.endsWith(".climatica.coop") ? "article.article-content.contenido" : "";
+        if (!specific.isEmpty() && document.select(specific).size() == 1) {
+            Element selected = document.selectFirst(specific).clone().attr("data-reader-body", "true");
+            if (selected.hasClass("articulo--vineta")) selected.attr("data-reader-image-only", "true");
+            return selected;
+        }
+        ArrayList<Element> articles = new ArrayList<>();
+        for (Element candidate : document.select("article"))
+            if ((candidate.parent() == null || candidate.parent().closest("article") == null) && candidate.closest("aside, nav, footer") == null
+                && !CLUTTER.matcher(candidate.id() + " " + candidate.className()).find()) articles.add(candidate);
+        Element scope = null;
+        for (Element candidate : articles) {
+            boolean matches = false;
+            for (Element heading : candidate.select("h1")) matches |= !title.isEmpty() && heading.text().equalsIgnoreCase(title);
+            if (matches) { if (scope != null) return null; scope = candidate; }
+        }
+        if (scope == null && articles.size() == 1) scope = articles.get(0);
+        if (scope == null && articles.size() > 1) return null;
+        Element search = scope == null ? document.body() : scope;
+        List<Element> bodies = search.select("[itemprop=articleBody], .article-body, .article__body, .entry-content, .post-content, .zox-post-body");
+        if (bodies.contains(search)) return search.clone().attr("data-reader-body", "true");
+        if (!bodies.isEmpty()) {
+            Element joined = new Element("article").attr("data-reader-body", "true");
+            for (Element candidate : bodies) {
+                if (excluded(candidate, search)) continue;
+                boolean nested = false;
+                for (Element parent = candidate.parent(); parent != null && parent != search; parent = parent.parent()) if (bodies.contains(parent)) { nested = true; break; }
+                if (!nested && (scope == null || candidate.closest("article") == scope)) joined.appendChild(candidate.clone());
+            }
+            if (!joined.children().isEmpty()) return joined;
+        }
+        if (scope != null) return scope.clone();
+        List<Element> mains = document.select("main, [role=main]");
+        return mains.size() == 1 ? mains.get(0).clone() : null;
     }
     private static final class Extraction {
         final ArrayList<Block> blocks = new ArrayList<>();
@@ -243,12 +374,23 @@ final class ArticleContent {
             if (!image.isEmpty() && result.images.add(image)) result.blocks.add(new Block("", image, false));
             return;
         }
+        if (tag.equals("tr")) {
+            ArrayList<String> cells = new ArrayList<>();
+            for (Element cell : element.children()) if (cell.normalName().matches("th|td")) cells.add(cell.text());
+            String text = String.join(" | ", cells).trim();
+            if (!text.isEmpty()) {
+                if (text.length() > 180000 - result.characters) { text = text.substring(0, 180000 - result.characters); result.truncated = true; }
+                result.blocks.add(new Block(text, "", false, false, true)); result.characters += text.length(); result.paragraphs++;
+            }
+            for (Element image : element.select("img")) walk(image, url, result);
+            return;
+        }
         boolean textBlock = tag.matches("p|h[2-4]|li|blockquote|figcaption");
         if (textBlock && element.select("p,li,blockquote").size() <= (tag.matches("p|li|blockquote") ? 1 : 0)) {
             String text = element.text().replace('\u00a0', ' ').trim();
             if (!text.isEmpty() && result.texts.add(text)) {
                 if (text.length() > 180000 - result.characters) { text = text.substring(0, 180000 - result.characters); result.truncated = true; }
-                result.blocks.add(new Block(text, "", tag.startsWith("h")));
+                result.blocks.add(new Block(text, "", tag.startsWith("h"), tag.equals("figcaption")));
                 result.characters += text.length();
                 if (!tag.startsWith("h") && !tag.equals("figcaption")) result.paragraphs++;
             }
@@ -288,7 +430,18 @@ final class ArticleContent {
     }
     private static boolean samePage(String candidate, String url) {
         String normalized = https(candidate, url);
-        return !normalized.isEmpty() && normalized.split("#", 2)[0].equals(url.split("#", 2)[0]);
+        return !normalized.isEmpty() && pageIdentity(normalized).equals(pageIdentity(https(url, url)));
+    }
+    private static String pageIdentity(String url) {
+        String address = url.split("#", 2)[0];
+        int query = address.indexOf('?');
+        if (query < 0) return address;
+        ArrayList<String> parameters = new ArrayList<>();
+        for (String parameter : address.substring(query + 1).split("&")) {
+            String name = parameter.split("=", 2)[0].toLowerCase(Locale.ROOT);
+            if (!name.matches("utm_.*|fbclid|gclid|dclid|msclkid|at_.*|mc_cid|mc_eid|cmpid|ocid|ref_src|ref_url")) parameters.add(parameter);
+        }
+        return address.substring(0, query) + (parameters.isEmpty() ? "" : "?" + String.join("&", parameters));
     }
     private static String structuredImage(Object value, String url) {
         if (value instanceof JSONObject) return https(first(((JSONObject)value).optString("url"), ((JSONObject)value).optString("contentUrl")), url);
@@ -307,7 +460,7 @@ final class ArticleContent {
             HttpURLConnection connection = (HttpURLConnection)new URL(current).openConnection();
             connection.setConnectTimeout(12000); connection.setReadTimeout(12000);
             connection.setInstanceFollowRedirects(false); connection.setUseCaches(false);
-            connection.setRequestProperty("User-Agent", "Mozilla/5.0 Pliegue/0.5");
+            connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:137.0) Gecko/20100101 Firefox/137.0");
             connection.setRequestProperty("Accept", "text/html,application/xhtml+xml");
             connection.setRequestProperty("Accept-Encoding", "identity");
             try {
@@ -344,11 +497,11 @@ final class ArticleContent {
         if (!file.isFile() || System.currentTimeMillis() - file.lastModified() > CACHE_AGE || file.length() > MAX_CACHE_FILE) return null;
         try (InputStream input = Files.newInputStream(file.toPath())) {
             JSONObject object = new JSONObject(new String(read(input, MAX_CACHE_FILE), StandardCharsets.UTF_8));
-            if (!url.equals(object.optString("url")) || object.optInt("version") != 3) return null;
+            if (!url.equals(object.optString("url")) || object.optInt("version") != CACHE_VERSION) return null;
             ArrayList<Block> blocks = new ArrayList<>(); JSONArray items = object.getJSONArray("blocks");
             for (int i = 0; i < items.length(); i++) {
                 JSONObject item = items.getJSONObject(i); String text = item.optString("text").trim(), image = https(item.optString("image"), url);
-                if (!text.isEmpty()) blocks.add(new Block(text, "", item.optBoolean("heading")));
+                if (!text.isEmpty()) blocks.add(new Block(text, "", item.optBoolean("heading"), item.optBoolean("caption"), item.optBoolean("row")));
                 else if (!image.isEmpty()) blocks.add(new Block("", image, false));
             }
             return blocks.isEmpty() ? null : new ArticleContent(object.optString("title").trim(), object.optString("source").trim(), blocks, false, "");
@@ -360,8 +513,8 @@ final class ArticleContent {
         try {
             if (!directory.isDirectory() && !directory.mkdirs()) return;
             JSONArray blocks = new JSONArray();
-            for (Block block : content.blocks) blocks.put(new JSONObject().put("text", block.text).put("image", block.image).put("heading", block.heading));
-            byte[] bytes = new JSONObject().put("version", 3).put("url", url).put("title", content.title).put("source", content.source).put("blocks", blocks).toString().getBytes(StandardCharsets.UTF_8);
+            for (Block block : content.blocks) blocks.put(new JSONObject().put("text", block.text).put("image", block.image).put("heading", block.heading).put("caption", block.caption).put("row", block.row));
+            byte[] bytes = new JSONObject().put("version", CACHE_VERSION).put("url", url).put("title", content.title).put("source", content.source).put("blocks", blocks).toString().getBytes(StandardCharsets.UTF_8);
             if (bytes.length > MAX_CACHE_FILE) return;
             temporary = File.createTempFile("article-", ".tmp", directory);
             Files.write(temporary.toPath(), bytes);

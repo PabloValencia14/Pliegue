@@ -32,7 +32,9 @@ public final class NewsImagesCheck {
         if (!entry.getString("link").equals("https://example.com/atom") || !entry.getString("image").equals("https://images.example/atom.jpg") || !entry.getString("body").contains("Texto público")) throw new AssertionError("Atom headline, alternate link, photo or content lost");
         String defaultLink=atom.replace("rel='alternate' ", "");
         if (!parseDocument(defaultLink,"El Salto").getJSONObject(0).getString("link").equals("https://example.com/atom")) throw new AssertionError("Default Atom alternate link ignored");
-        System.out.println("NewsImagesCheck: 16 checks passed");
+        JSONObject description=parseDocument("<rss><channel>"+item("<description><![CDATA[<p>Artículo completo publicado en el canal</p>]]></description>")+"</channel></rss>","elDiario.es").getJSONObject(0);
+        if (!description.getBoolean("body_full") || !description.getString("body_kind").equals("description")) throw new AssertionError("Publisher-provided full RSS description was mistaken for a teaser");
+        System.out.println("NewsImagesCheck: 17 checks passed");
     }
     private static void check(String markup, String expected) throws Exception {
         JSONObject article=parse(item(markup)).getJSONObject(0);

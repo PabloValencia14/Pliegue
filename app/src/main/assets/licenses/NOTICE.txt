@@ -1,0 +1,6 @@
+Readability4J 1.0.8 — Copyright 2017 dankito — Apache License 2.0
+Mozilla Readability — Apache License 2.0
+Kotlin standard library and annotations — JetBrains — Apache License 2.0
+SLF4J 1.7.25 — QOS.ch — MIT License
+Jsoup 1.18.3 — Jonathan Hedley — MIT License
+License texts are included in this directory.

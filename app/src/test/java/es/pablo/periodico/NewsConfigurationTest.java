@@ -78,4 +78,19 @@ public class NewsConfigurationTest {
         News.Catalog disabled = new News.Catalog(Arrays.asList("Actualidad"));
         assertEquals(0, disabled.merge(new JSONArray().put(legacy)));
     }
+    @Test public void retiredGameFeedDoesNotReintroduceItsDeadLinksFromCache() throws Exception {
+        JSONArray previous = new JSONArray().put(article("removed-2023", "MeriStation", "Videojuegos"));
+        JSONArray fresh = new JSONArray().put(article("current-game", "VidaExtra", "Videojuegos"));
+        JSONArray result = News.mergeSaved(fresh, previous);
+        assertEquals(1, result.length());
+        assertEquals("VidaExtra", result.getJSONObject(0).getString("source"));
+    }
+    @Test public void retainedPublicFeedBodiesKeepTheirPublisherProvenance() throws Exception {
+        JSONObject previous = article("retained", "elDiario.es", "Actualidad").put("body", "<p>Texto entregado por el editor</p>");
+        JSONArray migrated = News.mergeSaved(new JSONArray(), new JSONArray().put(previous));
+        assertTrue(migrated.getJSONObject(0).getBoolean("body_full"));
+        assertFalse(previous.has("body_full"));
+        JSONObject unknown = article("unknown", "Otro medio", "Actualidad").put("body", "<p>Extracto</p>");
+        assertFalse(News.mergeSaved(new JSONArray().put(unknown), new JSONArray()).getJSONObject(0).getBoolean("body_full"));
+    }
 }

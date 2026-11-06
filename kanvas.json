@@ -65,6 +65,21 @@
           "at": "2026-11-05T22:22:52Z",
           "by": "codex",
           "text": "0.6.0 comprobada: 9 medios Actualidad, 5 Internacional; 23 pruebas JVM y comprobaciones Android de RSS/Atom/fotos/paginación/preferencias correctas. Modo tinta a color y mono medidos sobre píxeles de fotos en portada y lector; sin perder posición, al volver ni al girar. Pad 7 queda en modo color, orientación automática restaurada y sin errores recientes. Capturas finales actualizadas. Preparada publicación bajo PabloValencia14."
+        },
+        {
+          "at": "2026-11-06T13:11:34Z",
+          "by": "codex",
+          "text": "Nueva incidencia: muchos artículos no se extraen completos y quedan pies de seguir leyendo. Se auditan muestras reales del catálogo de la Pad 7, texto RSS frente a HTML y falsas restricciones; se corregirá la extracción y la limpieza del lector con pruebas por medio."
+        },
+        {
+          "at": "2026-11-06T13:30:09Z",
+          "by": "codex",
+          "text": "Auditoría de 34 noticias/17 fuentes: Readability4JExtended recupera CTXT y BBC en directo que antes devolvían solo resumen; se integra motor usado por ReadYou y limpieza de promociones. Comprobado en tablet: Motorsport entrega HTML con User-Agent estándar; El País sigue respondiendo403. MeriStation enlaza páginas404 de2023, sustituido por canal VidaExtra actual. Se respetan contenidos públicos y RSS completos publicados por los medios."
+        },
+        {
+          "at": "2026-11-06T14:04:18Z",
+          "by": "codex",
+          "text": "Validación nativa de 34 noticias en Pad7:32 completas;2 deElPaís rechazadas403. Público14.669car/3fotos,CTXT10.436/2,BBCdirecto17.939/24,F1 6.903/2 con23filas preservadas. UIreal llega al últimopárrafo dePúblico yF1 sinWebView ni pies de publicación. Se invalidan extracciones antiguas y se cubren también pies Sigueleyendo en{medio}. Mantiene temas y tintaacolor. Pendiente decisión del usuario sobre ocultar contenidos noaccesibles."
         }
       ]
     }

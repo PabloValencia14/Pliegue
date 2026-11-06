@@ -1,10 +1,14 @@
 package es.pablo.periodico;
 
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.ActivityNotFoundException;
+import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Rect;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
+import android.net.Uri;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
@@ -18,6 +22,7 @@ public class ReaderActivity extends Activity {
     private final int paper = Color.rgb(246, 245, 239), ink = Color.rgb(32, 32, 29);
     private static final java.util.concurrent.ExecutorService CONTENT = java.util.concurrent.Executors.newFixedThreadPool(2);
     private java.util.concurrent.Future<?> contentTask;
+    private AlertDialog browserNotice;
     private final ArrayList<Photo> photos = new ArrayList<>();
     private LinearLayout page;
     private ScrollView scroll;
@@ -108,24 +113,18 @@ public class ReaderActivity extends Activity {
             } catch (Exception error) {
                 runOnUiThread(() -> {
                     if (current != request || isFinishing() || isDestroyed()) return;
-                    status.setText("");
-                    page.removeAllViews();
-                    page.addView(text("No se ha podido cargar el contenido. Comprueba la conexión y vuelve a intentarlo.", 19, false));
-                    TextView retry = text("Reintentar", 17, true);
-                    retry.setMinHeight(dp(52));
-                    retry.setGravity(Gravity.CENTER_VERTICAL);
-                    retry.setOnClickListener(view -> load());
-                    page.addView(retry);
+                    offerBrowser();
                 });
             }
         });
     }
     private void show(ArticleContent article) {
+        if (article.limited) { offerBrowser(); return; }
         for (Photo photo : photos) ArticleImages.clear(photo.view);
         photos.clear();
         page.removeAllViews();
         source.setText(article.source);
-        status.setText(article.limited ? "Texto parcial" : "");
+        status.setText("");
         TextView title = text(article.title, 33, true);
         title.setAccessibilityHeading(true);
         title.setPadding(0, 0, 0, dp(22));
@@ -156,6 +155,31 @@ public class ReaderActivity extends Activity {
             }
         }
         scroll.post(() -> { scroll.scrollTo(0, restoreY); updatePhotos(); });
+    }
+    private void offerBrowser() {
+        status.setText("");
+        browserNotice = new AlertDialog.Builder(this)
+            .setTitle("Texto completo no disponible")
+            .setMessage("No se ha podido recuperar esta noticia completa. Puedes continuar en la web del medio.")
+            .setPositiveButton("Abrir en el navegador", (dialog, which) -> {
+                Intent browser = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                browser.addCategory(Intent.CATEGORY_BROWSABLE);
+                // Resolver HTTPS sin dominio evita abrir una app del medio asociada a su enlace.
+                browser.setSelector(new Intent(Intent.ACTION_VIEW, Uri.parse("https://"))
+                    .addCategory(Intent.CATEGORY_BROWSABLE));
+                try {
+                    startActivity(browser);
+                    finish();
+                } catch (ActivityNotFoundException error) {
+                    browserNotice = new AlertDialog.Builder(this)
+                        .setTitle("Navegador no disponible")
+                        .setMessage("Instala o activa un navegador para abrir la web del medio.")
+                        .setPositiveButton("Volver al periódico", (notice, button) -> finish())
+                        .setOnCancelListener(notice -> finish()).show();
+                }
+            })
+            .setNegativeButton("Volver al periódico", (dialog, which) -> finish())
+            .setOnCancelListener(dialog -> finish()).show();
     }
     private void updatePhotos() {
         if (scroll == null || scroll.getHeight() == 0) return;
@@ -199,6 +223,7 @@ public class ReaderActivity extends Activity {
     @Override protected void onDestroy() {
         request++;
         if (contentTask != null) contentTask.cancel(true);
+        if (browserNotice != null) browserNotice.dismiss();
         for (Photo photo : photos) ArticleImages.clear(photo.view);
         super.onDestroy();
     }

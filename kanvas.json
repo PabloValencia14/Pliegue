@@ -80,6 +80,16 @@
           "at": "2026-11-06T14:04:18Z",
           "by": "codex",
           "text": "Validación nativa de 34 noticias en Pad7:32 completas;2 deElPaís rechazadas403. Público14.669car/3fotos,CTXT10.436/2,BBCdirecto17.939/24,F1 6.903/2 con23filas preservadas. UIreal llega al últimopárrafo dePúblico yF1 sinWebView ni pies de publicación. Se invalidan extracciones antiguas y se cubren también pies Sigueleyendo en{medio}. Mantiene temas y tintaacolor. Pendiente decisión del usuario sobre ocultar contenidos noaccesibles."
+        },
+        {
+          "at": "2026-11-06T14:55:27Z",
+          "by": "codex",
+          "text": "Decisión del usuario: conservar las noticias que no se puedan extraer completas, con aviso y apertura en navegador externo. Se implementa salida explícita al navegador solo para contenidos parciales o fallos; los completos siguen en el lector nativo."
+        },
+        {
+          "at": "2026-11-06T18:27:18Z",
+          "by": "codex",
+          "text": "La Pad 7 muestra un aviso para noticias incompletas y permite abrirlas en el navegador; la lectura completa sigue integrada. Comprobados aviso, vuelta y apertura en Opera con un artículo de El País, y lectura nativa de Público."
         }
       ]
     }

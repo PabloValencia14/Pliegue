@@ -4,7 +4,7 @@
 
 Periódico personal para Android, pensado para tablets. Portada de varias columnas y anchos distintos, fotografías en escala de grises y lectura de noticias dentro de la app.
 
-[Descargar APK 0.7.0](https://github.com/PabloValencia14/Pliegue/releases/tag/v0.7.0)
+[Descargar APK 0.7.1](https://github.com/PabloValencia14/Pliegue/releases/tag/v0.7.1)
 
 ## Lectura
 
@@ -19,7 +19,7 @@ Periódico personal para Android, pensado para tablets. Portada de varias column
 
 Dentro de cada fuente se conserva su orden de publicación, sin resúmenes generados por IA. Las fuentes tienen un número finito de artículos: la carga continua añade los disponibles y no inventa contenido. Se leen canales RSS y Atom; Público se recoge de su portada pública porque no se ha encontrado un RSS operativo. Si cambia la estructura de esa portada, habrá que adaptar su extracción. CTXT se lee hasta el cierre del RSS y sus enlaces antiguos se convierten a HTTPS. El cambio de nombre de Mundo a Internacional conserva la selección y las noticias guardadas. Videojuegos utiliza VidaExtra; se retiran del catálogo los enlaces del antiguo RSS de MeriStation, detenido en 2023 y con páginas eliminadas.
 
-El contenido completo que un editor publica en su RSS es una fuente pública independiente de su página web. Se preserva cuando está disponible y se utiliza la página para completar los canales abreviados. Si el medio no proporciona el cuerpo completo, se indica «Texto parcial»; no se recupera contenido protegido mediante sesiones, cookies ni proxies. El texto extraído completo se guarda durante 24 horas en una caché privada de hasta 8 MiB; se invalidan las extracciones de versiones anteriores para no conservar recortes ni promociones. Las fotografías usan caché de memoria y necesitan conexión tras cerrar el proceso.
+El contenido completo que un editor publica en su RSS es una fuente pública independiente de su página web. Se preserva cuando está disponible y se utiliza la página para completar los canales abreviados. Si no se puede recuperar el cuerpo completo, aparece un aviso con la opción de abrir la noticia en el navegador; no se recupera contenido protegido mediante sesiones, cookies ni proxies. El texto extraído completo se guarda durante 24 horas en una caché privada de hasta 8 MiB; se invalidan las extracciones de versiones anteriores para no conservar recortes ni promociones. Las fotografías usan caché de memoria y necesitan conexión tras cerrar el proceso.
 
 ![Portada de Pliegue](assets/screenshots/portada.png)
 
@@ -67,6 +67,8 @@ Proyecto Java con [Jsoup](https://jsoup.org/) y Readability4J para analizar HTML
 
 El tablero del proyecto está en `kanvas.json`; sus instrucciones se encuentran en `.agents/skills/kanvas/SKILL.md`.
 
-La versión 0.7.0 se ha comprobado en una Pad 7 con Android 16 con 34 noticias reales de 17 fuentes: 32 ofrecen extracción completa; las dos muestras de El País rechazan la descarga con HTTP 403 y permanecen indicadas como parciales. La revisión del cuerpo incluye primeros y últimos párrafos, fotos editoriales y las 23 filas de tablas de una noticia de Fórmula 1. En la interfaz real se ha llegado al final de una entrevista de Público y de esa noticia de F1, sin WebView ni pies automáticos de publicación. Pasan las 38 pruebas unitarias y las comprobaciones Android de RSS/Atom, metadatos, paginación y preferencias heredadas.
+La versión 0.7.0 se comprobó en una Pad 7 con Android 16 con 34 noticias reales de 17 fuentes: 32 ofrecían extracción completa; las dos muestras de El País rechazaban la descarga con HTTP 403. La revisión del cuerpo incluyó primeros y últimos párrafos, fotos editoriales y las 23 filas de tablas de una noticia de Fórmula 1. En la interfaz real se llegó al final de una entrevista de Público y de esa noticia de F1, sin WebView ni pies automáticos de publicación. Pasaron las 38 pruebas unitarias y las comprobaciones Android de RSS/Atom, metadatos, paginación y preferencias heredadas.
+
+En la versión 0.7.1 se comprobó en esa tablet el aviso de una noticia incompleta de El País, la apertura de su dirección en Opera y la vuelta al periódico; una noticia completa de Público se abrió en el lector nativo. También pasan las 38 pruebas unitarias.
 
 Las comprobaciones anteriores de portada, fotografías, tinta a color y monocroma, desplazamiento, giro y carga de otro lote siguen documentadas en las versiones 0.5.0 y 0.6.0. También se forzó una actualización en segundo plano que generó la notificación sin abrir la app. La ejecución automática natural de las 8:00 sigue pendiente de observar.

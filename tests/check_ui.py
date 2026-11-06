@@ -67,20 +67,32 @@ for mode, enabled in [("Tinta a color", True), ("Tinta monocroma", False)]:
     assert preferences.find("boolean[@name='color_ink']").attrib["value"] == str(enabled).lower(), "No se conserva el modo de tinta"
     assert tree.find(".//node[@text='Pliegue']") is not None, "El cambio de aspecto pierde el periódico"
     screenshot("portada-color.png" if enabled else "portada-monocroma.png")
-cards = [n for n in tree.iter("node") if n.attrib.get("class") == "android.widget.LinearLayout" and n.attrib.get("clickable") == "true"]
-# Tocar el titular evita depender de la altura que ocupa la fotografía.
-headline = next(n for n in cards[0].iter("node") if n.attrib.get("text"))
-tap(headline)
-deadline = time.monotonic() + 75
-while True:
+tried = set()
+for attempt in range(6):
     tree = snapshot()
-    assert tree.find(".//node[@class='android.webkit.WebView']") is None, "El lector sigue usando una vista web"
-    assert not any(n.attrib.get("text", "").casefold() == "leer noticia" for n in tree.iter("node")), "Sigue apareciendo un paso intermedio"
-    paragraphs = [n for n in tree.iter("node") if n.attrib.get("class") == "android.widget.TextView" and len(n.attrib.get("text", "")) >= 160]
-    if paragraphs:
+    cards = [n for n in tree.iter("node") if n.attrib.get("class") == "android.widget.LinearLayout" and n.attrib.get("clickable") == "true"]
+    headlines = [next(n for n in card.iter("node") if n.attrib.get("text")) for card in cards]
+    headline = next(n for n in headlines if n.attrib["text"] not in tried)
+    tried.add(headline.attrib["text"])
+    tap(headline)
+    deadline = time.monotonic() + 75
+    while True:
+        tree = snapshot()
+        assert tree.find(".//node[@class='android.webkit.WebView']") is None, "El lector sigue usando una vista web"
+        assert not any(n.attrib.get("text", "").casefold() == "leer noticia" for n in tree.iter("node")), "Sigue apareciendo un paso intermedio"
+        limited = tree.find(".//node[@text='Texto completo no disponible']") is not None
+        paragraphs = [n for n in tree.iter("node") if n.attrib.get("class") == "android.widget.TextView" and len(n.attrib.get("text", "")) >= 160]
+        if limited or paragraphs:
+            break
+        assert time.monotonic() < deadline, "No aparece contenido ni aviso de noticia incompleta"
+        time.sleep(2)
+    if not limited:
         break
-    assert time.monotonic() < deadline, "No aparece contenido de la noticia en el lector nativo"
-    time.sleep(2)
+    assert any(n.attrib.get("text", "").casefold() == "abrir en el navegador" for n in tree.iter("node")), "El aviso no permite abrir el navegador"
+    tap(next(n for n in tree.iter("node") if n.attrib.get("text", "").casefold() == "volver al periódico"))
+    assert snapshot().find(".//node[@text='Pliegue']") is not None, "Cancelar el aviso no vuelve al periódico"
+else:
+    raise AssertionError("No hay una noticia completa visible para comprobar el lector")
 activity = adb("shell", "dumpsys", "activity", "activities")
 assert re.search(r"(?:mResumedActivity|topResumedActivity).*es\.pablo\.periodico/\.ReaderActivity", activity), "Se ha abierto otra app"
 assert tree.find(".//node[@class='android.widget.ImageView']") is not None, "Falta la fotografía en el lector nativo"
